@@ -1,0 +1,7 @@
+# コマンド
+
+```
+file
+binwalk
+strings
+```
