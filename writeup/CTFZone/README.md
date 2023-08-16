@@ -510,7 +510,7 @@ $ curl -X 'POST' -H 'Content-Type: application/json' --data-binary '{"query":"qu
 仕方がないので、もう一度ソースを確認すると、送信しているGraphQLのクエリ生成に問題があるため、usernameに`"`を含めることで任意のクエリを送信できそう。  
 後は、Goの構造体に合うようなレスポンスが変えるようなクエリを送信できれば良さそう。
 
-これは、GraphQLのラベル機能を使うことで何とかなりそう。  
+これは、GraphQLのエイリアス機能を使うことで何とかなりそう。  
 しかも丁度良く、idの文字数が36文字だった。  
 試しに、hackerone.comのGraphQL APIに以下のクエリを送ってみると、introとreputationがいい感じに帰ってきた。
 
