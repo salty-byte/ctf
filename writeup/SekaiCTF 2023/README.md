@@ -1,11 +1,11 @@
-# SekaiCTF 2023 Writeup {ignore=true}
+# SekaiCTF 2023 Writeup
 
 SekaiCTF 2023（<https://ctftime.org/event/1923/>）に参加しました。  
 土, 26 8月 2023, 01:00 JST — 月, 28 8月 2023, 01:00 JST
 
 OnePaddingというチームで参加しましたが、問題が難しくて私は一問も解けなかったので、少しずつ復習します。
 
-<!-- @import "[TOC]" {cmd="toc" depthFrom=1 depthTo=3 orderedList=false} -->
+<!-- @import "[TOC]" {cmd="toc" depthFrom=2 depthTo=3 orderedList=false} -->
 
 <!-- code_chunk_output -->
 

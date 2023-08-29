@@ -1,4 +1,4 @@
-# TFC CTF 2023 Writeup {ignore=true}
+# TFC CTF 2023 Writeup
 
 TFC CTF 2023（<https://ctftime.org/event/2034>）に参加しました。  
 金, 28 7月 2023, 19:00 JST — 日, 30 7月 2023, 19:00 JST
@@ -8,7 +8,7 @@ OnePaddingというチームで参加して、1397チーム中35位でした。
 問題毎に個別のインスタンスが割り当てられていたので、他の人のことを気にせずに問題に取り組めたのが良かったです。  
 解けなかった問題でも途中までやったものは復習して追記してます。
 
-<!-- @import "[TOC]" {cmd="toc" depthFrom=1 depthTo=3 orderedList=false} -->
+<!-- @import "[TOC]" {cmd="toc" depthFrom=2 depthTo=3 orderedList=false} -->
 
 <!-- code_chunk_output -->
 

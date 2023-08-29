@@ -1,4 +1,4 @@
-# CTFZone 2023 Quals Writeup {ignore=true}
+# CTFZone 2023 Quals Writeup
 
 CTFZone 2023 Quals（<https://ctftime.org/event/1955>）に参加しました。  
 土, 12 8月 2023, 18:00 JST — 月, 14 8月 2023, 06:00 JST
@@ -7,7 +7,7 @@ CTFZone 2023 Quals（<https://ctftime.org/event/1955>）に参加しました。
 Bounty the B4rに時間がかかりすぎて、他の問題に取り組めなかったです。  
 後で復習したいですが、他のWriteupがあんまり無いのでやれたら追記したいと思います。
 
-<!-- @import "[TOC]" {cmd="toc" depthFrom=1 depthTo=3 orderedList=false} -->
+<!-- @import "[TOC]" {cmd="toc" depthFrom=2 depthTo=3 orderedList=false} -->
 
 <!-- code_chunk_output -->
 
