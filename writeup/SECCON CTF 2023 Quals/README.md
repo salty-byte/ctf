@@ -5,18 +5,18 @@ SECCON CTF 2023 Quals（<https://ctftime.org/event/2003/>）に参加しまし�
 
 チーム：OnePaddingで参加して、653チーム中87位（国内：35/334）でした。
 
-一問しか解かなかったですが、学びが結構あったので良かったです。  
+一問しか解けなかったですが、学びが結構あったので良かったです。  
 Web問は後で復習します。
 
 <!-- @import "[TOC]" {cmd="toc" depthFrom=2 depthTo=3 orderedList=false} -->
 
 <!-- code_chunk_output -->
 
-- [misk/readme 2023](#miskreadme-2023)
+- [misc/readme 2023](#miscreadme-2023)
 
 <!-- /code_chunk_output -->
 
-## misk/readme 2023
+## misc/readme 2023
 
 93 solved / 104 points
 
@@ -137,7 +137,7 @@ ctf@52f21ee060a3:/$ cat /proc/44/syscall
 /home/ctf/flag.txt | 7f85f5f82000-7f85f5f83000
 [先頭アドレスまでの差分] | e9f83
 
-スクリプトを書いても良かったが、実行時間の制限が30秒なため手動で計算した。
+スクリプトを書いても良かったが、実行時間の制限が60秒なため手動で計算した。
 
 ```sh
 $ nc readme-2023.seccon.games 2023
