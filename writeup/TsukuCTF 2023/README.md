@@ -231,7 +231,7 @@ Makefileは以下のようになっていました。
 .PHONY: all
 
 all:main.o one.o
-	$(CC) main.o one.o ab.o -no-pie
+	$(CC) main.o one.o -no-pie
 ```
 
 ただし、いざmakeすると以下のようなエラーが出ました。
@@ -389,7 +389,7 @@ TsukuCTF23{120}
 Flag形式はTsukuCTF23{<一個前に署名した人の名前>&<署名した時刻(ISO8601拡張形式)>}とのこと。  
 この署名技術は知らなかったので、勉強になりました。  
 
-最初に、`binwalk -e signed_flag.png`を試すと改変前の画像は見つけられたのですが、署名した人の名前と時刻がわからなかったため他の方法を探しました。
+最初に、`binwalk -D='.*' signed_flag.png`を試すと改変前の画像は見つけられたのですが、署名した人の名前と時刻がわからなかったため他の方法を探しました。
 
 次に、`exiftool signed_flag.png`を試すと、以下のような結果が得られました。
 
