@@ -64,7 +64,7 @@ DIVER OSINT CTF 2024（<https://ctftime.org/event/2365/>）に参加しました
 
 <img src="./images/label_01.jpg" alt="label_01" width="400" />
 
-宛先の部分が削られているが、下のQRコードは完全な状態でした。
+宛先の部分が削られているが、下のQRコードは完全な状態でした。  
 それぞれQRコードを読み取ると、2つ目(rMQRコード)にSHIPMENT ADDRESSが書いてありました。
 
 ![label_02](./images/label_02.jpg)
@@ -95,7 +95,7 @@ joinすると、チャンネルにFlagのQRコードがありました。
 ![timestamp](./images/timestamp.jpg)
 
 xに投稿されている画像にはexif情報などは含まれていませんでした。  
-関係がありそうな文言でGoogle検索すると、以下のPDFが見つかりました。
+関係がありそうな文言でGoogle検索すると、以下のPDFが見つかりました。  
 <https://www.mod.go.jp/js/pdf/2024/p20240312_01.pdf>
 
 試しにpdfから画像を抽出してみると、時刻が書かれた画像がありました。
@@ -134,8 +134,8 @@ A half-hour before sunset, approximately 600 people, mostly airmen in uniform, g
 
 後はOpenStreetMapで探すだけのはずが、TrackとFieldで別のWay番号だったのではまりました。
 
-不正解: <https://www.openstreetmap.org/way/810021665>
-正解: <https://www.openstreetmap.org/way/810021666>
+- 不正解: <https://www.openstreetmap.org/way/810021665>
+- 正解: <https://www.openstreetmap.org/way/810021666>
 
 ```text
 Flag: Diver24{810021666}
@@ -163,12 +163,12 @@ Flag: Diver24{810021666}
 youtuberの記事を探すと、以下の動画が見つかりました。  
 <https://youtu.be/VER6-0Pk0-A?t=215>
 
-この動画から、捕まった駅は新幹線のNextに書いてある`博多`だと思ったんですが、違いました。
+この動画から、捕まった駅は新幹線のNextに書いてある`博多`だと思ったんですが、違いました。  
 乗り継いだ駅は他の記事に書いてありました。  
 <https://news.yahoo.co.jp/articles/bc10510d5fed2d71ed80c26b7c6b64eb80aefc16>
 
 後は列車番号を調べるだけです。  
-単なる`572`だとダメだったので、以下の表から`572A`であることがわかりました。
+単なる`572`だとダメだったので、以下の表から`572A`であることがわかりました。  
 <https://munexpress.web.fc2.com/skse/tita/2023/582-20230318.pdf>
 
 ```text
@@ -247,7 +247,7 @@ Flag: Diver24{Alidaunia_13:45:47_1600}
   - Loaded on board: 30 Apr 2024 11:24 (TICT)
   - Vessel Departure: 30 Apr 2024 16:36 (TICT)
 
-2台目は別のサイトで検索しましたが、5/22～の情報だったので、おそらく違うと思われます。
+2台目は別のサイトで検索しましたが、5/22～の情報だったので、おそらく違うと思われます。  
 <https://www.hapag-lloyd.com/en/online-business/track/track-by-container-solution.html?container=HLBU++1173129>
 
 以上から、2024-04-19 AM から2024-04-22 PM までの間と推測できます。  
