@@ -62,7 +62,7 @@ DIVER OSINT CTF 2024（<https://ctftime.org/event/2365/>）に参加しました
 
 以下が問題の画像。
 
-![label_01](./images/label_01.jpg)
+<img src="./images/label_01.jpg" alt="label_01" width="400" />
 
 宛先の部分が削られているが、下のQRコードは完全な状態でした。
 それぞれQRコードを読み取ると、2つ目(rMQRコード)にSHIPMENT ADDRESSが書いてありました。
@@ -149,7 +149,8 @@ Flag: Diver24{810021666}
 衛星の追跡サイト（<https://stdkmd.net/sat/>）で探すと下図のようになりました。  
 （CTFの終了間際でサイトの使い方を調べる時間がなかったので、500倍速の巻き戻し機能で頑張りました）
 
-![satellite_01](./images/satellite_01.jpg)
+
+<img src="./images/satellite_01.jpg" alt="satellite_01" width="400" />
 
 高度は503kmと思われますが、軍用飛行場までは特定できなかったです。（時間切れ）
 
@@ -227,8 +228,8 @@ Flag: Diver24{Alidaunia_13:45:47_1600}
 
 以下は問題の画像2枚です。
 
-![container_01](./images/container_01.jpg)
-![container_02](./images/container_02.jpg)
+<img src="./images/container_01.jpg" alt="container_01" width="400" />
+<img src="./images/container_02.jpg" alt="container_02" width="400" />
 
 トラックのコンテナ番号がわかるので、それを使って追跡する問題だと予想できます。
 
