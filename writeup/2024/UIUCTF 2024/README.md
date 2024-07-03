@@ -114,10 +114,10 @@ Next.jsのリダイレクトが発生する処理で`Host`ヘッダ及び`Origin
 今回の場合は、以下の箇所が該当しそうです。
 
 ```typescript
-// 1. ログアウト
-Response.redirect(new URL('/admin', nextUrl))
+// 1. ログアウト処理
+redirect("/login");
 
-// 2.正常ログイン
+// 2. 正常ログイン処理
 redirect('/admin');
 ```
 
