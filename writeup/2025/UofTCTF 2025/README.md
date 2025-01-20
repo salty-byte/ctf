@@ -1,7 +1,8 @@
 # UofTCTF 2025 Writeup / Upsolve
 
 UofTCTF 2025（<https://ctftime.org/event/2570/>）に参加しました。  
-復習しようとしたら問題が見れなくなっていたので、簡易Writeup + Upsolveです。  
+<s>復習しようとしたら問題が見れなくなっていたので、</s>Writeup + Upsolveです。  
+※問題と公式解答はちゃんとありました(<https://github.com/UofTCTF/uoftctf-2025-chals-public>)  
 Misc問を主にやってましたが、Miscは後1問解きたかったです。
 
 <!-- @import "[TOC]" {cmd="toc" depthFrom=2 depthTo=3 orderedList=false} -->
