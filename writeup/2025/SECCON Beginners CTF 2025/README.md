@@ -9,4 +9,6 @@ cryptoとかもやりましたが、解いている人が多そうだったの�
 - web
   - [login4b](./web/login4b/)
 - pwn
+  - [pet_name](./pwn/pet_name/)
+  - [pet_sound](./pwn/pet_sound/)
   - [pivot4b](./pwn/pivot4b/)
