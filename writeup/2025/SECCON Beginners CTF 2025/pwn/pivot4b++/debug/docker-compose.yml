@@ -1,0 +1,7 @@
+services:
+  pivot4b:
+    build: .
+    ports:
+      - 12300:5000
+      - 12345:12345 # gdbserver通信用
+    restart: unless-stopped

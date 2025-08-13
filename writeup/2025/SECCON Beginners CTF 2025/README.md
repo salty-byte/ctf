@@ -12,3 +12,4 @@ cryptoとかもやりましたが、解いている人が多そうだったの�
   - [pet_name](./pwn/pet_name/)
   - [pet_sound](./pwn/pet_sound/)
   - [pivot4b](./pwn/pivot4b/)
+  - [pivot4b++](./pwn/pivot4b++/) *upsolve*
